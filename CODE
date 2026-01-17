@@ -1,0 +1,93 @@
+ #include <SPI.h>
+#include <SD.h>
+#include <Wire.h>
+#include <RTClib.h>
+#include <DHT.h>
+
+#define DHTPIN 4
+#define DHTTYPE DHT11
+#define LDR_PIN A0
+#define SD_CS 10
+
+DHT dht(DHTPIN, DHTTYPE);
+RTC_DS3231 rtc;
+File dataFile;
+
+void setup() {
+  Serial.begin(9600);
+  delay(2000);
+
+  dht.begin();
+  Wire.begin();
+
+  if (!rtc.begin()) {
+    Serial.println("RTC not found");
+    while (1);
+  }
+
+  if (!SD.begin(SD_CS)) {
+    Serial.println("SD card failed");
+    while (1);
+  }
+
+  if (!SD.exists("data.csv")) {
+    dataFile = SD.open("data.csv", FILE_WRITE);
+    dataFile.println("Date,Time,Temperature,Humidity,Light");
+    dataFile.close();
+  }
+
+  Serial.println("System Ready");
+}
+
+void loop() {
+  logDataToSD();
+  readFileAndPrint();
+  delay(5000);   // sampling rate
+}
+
+void logDataToSD() {
+  DateTime now = rtc.now();
+
+  float temp = dht.readTemperature();
+  float hum = dht.readHumidity();
+  int lightVal = analogRead(LDR_PIN);
+
+  if (isnan(temp) || isnan(hum)) {
+    Serial.println("DHT error");
+    return;
+  }
+
+  dataFile = SD.open("data.csv", FILE_WRITE);
+  if (dataFile) {
+    dataFile.print(now.year()); dataFile.print("-");
+    dataFile.print(now.month()); dataFile.print("-");
+    dataFile.print(now.day()); dataFile.print(",");
+
+    dataFile.print(now.hour()); dataFile.print(":");
+    dataFile.print(now.minute()); dataFile.print(":");
+    dataFile.print(now.second()); dataFile.print(",");
+
+    dataFile.print(temp); dataFile.print(",");
+    dataFile.print(hum); dataFile.print(",");
+    dataFile.println(lightVal);
+
+    dataFile.close();
+    Serial.println("Data logged to SD");
+  }
+}
+
+void readFileAndPrint() {
+  Serial.println("---- CSV FILE CONTENT ----");
+
+  dataFile = SD.open("data.csv");
+  if (dataFile) {
+    while (dataFile.available()) {
+      Serial.write(dataFile.read());
+    }
+    dataFile.close();
+  } else {
+    Serial.println("File open failed");
+  }
+
+  Serial.println("---- END OF FILE ----");
+}
